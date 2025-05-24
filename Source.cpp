@@ -1,4 +1,4 @@
-#include <bits/stdc++.h>
+#include <iostream>
 #include <fstream>
 using namespace std;
 
@@ -184,6 +184,46 @@ void getFrequenciesFromFile(string _filePath, MinHeap* _minHeap)
 			
 		}
 	}
+}
+
+HuffmanNode* generateHuffmanTree(MinHeap* _minHeap ) {
+
+	
+	
+
+	while (_minHeap->getSize() > 1)
+	{
+		//Allocate the two nodes
+		HuffmanNode* node1 = new HuffmanNode();
+
+		HuffmanNode* node2 = new HuffmanNode();
+
+		//Poll two nodes from heap
+		_minHeap->poll(node1);
+
+		_minHeap->poll(node2);
+
+
+		//Link parent node with the two nodes
+		HuffmanNode* parent = new HuffmanNode();
+
+		parent->left = node1;
+
+		parent->right = node2;
+
+		//Parent node character is a random character up to 255
+		parent->character = 0;
+
+		//Parent node freq is sum of two linked nodes
+		parent->freq = node1->freq + node2->freq;
+		
+		//Add to heap again and iterate over the process
+		_minHeap->add(parent);
+	}
+
+	HuffmanNode* rootHuffman = new HuffmanNode();
+	_minHeap->poll(rootHuffman);
+	return rootHuffman;
 }
 void testDisplayHeap(MinHeap* _minHeap)
 {
