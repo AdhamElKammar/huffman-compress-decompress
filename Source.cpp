@@ -187,10 +187,6 @@ void getFrequenciesFromFile(string _filePath, MinHeap* _minHeap)
 }
 
 HuffmanNode* generateHuffmanTree(MinHeap* _minHeap ) {
-
-	
-	
-
 	while (_minHeap->getSize() > 1)
 	{
 		//Allocate the two nodes
@@ -225,6 +221,22 @@ HuffmanNode* generateHuffmanTree(MinHeap* _minHeap ) {
 	_minHeap->poll(rootHuffman);
 	return rootHuffman;
 }
+
+
+void generateHuffmanCodes(HuffmanNode* root, string huffmanCodes[256] ,string currentCode) {
+
+	if (root == nullptr) return;
+
+	// Leaf node represents a character.
+	if (root->left == nullptr && root->right == nullptr) {
+		huffmanCodes[root->character] = currentCode;
+		return;
+	}
+
+	generateHuffmanCodes(root->left, huffmanCodes, currentCode + '0');
+	generateHuffmanCodes(root->right, huffmanCodes, currentCode + '1');
+}
+
 void testDisplayHeap(MinHeap* _minHeap)
 {
 	HuffmanNode node;
@@ -259,15 +271,26 @@ void testDisplayHeap(MinHeap* _minHeap)
 
 int main()
 {
-	
-	
+	string huffmanCodes[256] = {""};
 	MinHeap* minHeap = new MinHeap();	
-	string filePath;
-	cout << "Enter File Path: ";
-	cin >> filePath;
+	string filePath = "test.txt";
+	/*cout << "Enter File Path: ";
+	cin >> filePath;*/
 	getFrequenciesFromFile(filePath, minHeap);
 	testDisplayHeap(minHeap);
-	
+	HuffmanNode* huffmanTree = generateHuffmanTree(minHeap);
+	generateHuffmanCodes(huffmanTree, huffmanCodes, "");
+
+	for (int i = 0; i < 256; i++)
+	{
+		if (huffmanCodes[i] != "")
+		{
+			cout << "Charcter: " << (unsigned char)i << "Code: " << huffmanCodes[i] << endl;
+		}
+	}
+
+	int n;
+	cin >> n;
 	delete minHeap;
 	return 0;
 }
