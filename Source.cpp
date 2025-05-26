@@ -1,5 +1,6 @@
 #include <iostream>
 #include <fstream>
+#include <bitset>
 using namespace std;
 
 struct HuffmanNode {
@@ -312,45 +313,82 @@ void testDisplayCodes(const string huffmanCodes[256])
 	cout << "===============================" << endl;
 }
 
-void compress(string huffmanCodes[256] , string _filePath)
+void compress(string huffmanCodes[256], string _filePath)
 {
-	//writing huffman codes to output file
-	ifstream file("test.txt", ios::binary);
+	ifstream file(_filePath, ios::binary);
 	if (!file.is_open())
 	{
-		cout << "Couldnt find file";
+		cout << "Couldn't find input file";
 		return;
 	}
-	ofstream output("output.txt", ios::out);
+	
+	int dotIndex = _filePath.find('.');
+
+	string fileExtension = _filePath.substr(dotIndex, _filePath.length() - dotIndex);
+
+	string _outputFilePath = "output" + fileExtension + ".ece2103";
+
+	ofstream output(_outputFilePath, ios::binary);
 	if (!output.is_open())
 	{
-		cout << "Couldnt find file";
+		cout << "Couldn't create output file";
 		return;
 	}
 
+	string curr = "";
 	char c;
+
+	// read input file character by character
 	while (file.get(c))
 	{
-		output << huffmanCodes[(unsigned char)c];
+		string huffmanCode = huffmanCodes[(unsigned char)c];
+
+		// process single bit in huffman code
+		for (char bit : huffmanCode)
+		{
+			curr += bit;
+
+			// when we have 8 bits, convert to byte and we write to outfut file
+			if (curr.length() == 8)
+			{
+				bitset<8> bits(curr);
+				unsigned char byte = (unsigned char)(bits.to_ulong());
+				output.put(byte);
+				curr = "";
+			}
+		}
 	}
+
+	// Handle padding
+	if (!curr.empty())
+	{
+		// Pad with zeros at the end
+		while (curr.length() < 8)
+		{
+			curr += '0';
+		}
+
+		bitset<8> bits(curr);
+		unsigned char byte = (unsigned char)(bits.to_ulong());
+		output.put(byte);
+	}
+
 	file.close();
 	output.close();
-
-	//segemntation of 8 bits
 }
 
 int main()
 {
 	string huffmanCodes[256] = {""};
 	MinHeap* minHeap = new MinHeap();	
-	string filePath = "test_small.bmp";
+	string filePath = "test.txt";
 	/*cout << "Enter File Path: ";
 	cin >> filePath;*/
 	getFrequenciesFromFile(filePath, minHeap);
 	minHeap = testDisplayHeap(minHeap);
 	HuffmanNode* huffmanTree = generateHuffmanTree(minHeap);
 	generateHuffmanCodes(huffmanTree, huffmanCodes, "");
-	testDisplayCodes(huffmanCodes);  // Display the codes of huffman tree leafs
+	testDisplayCodes(huffmanCodes); 
 
 	compress(huffmanCodes, filePath);
 	int n;
