@@ -270,6 +270,33 @@ MinHeap* testDisplayHeap(MinHeap* _minHeap)
 	return _minHeap;
 }
 
+void compress(string huffmanCodes[256] , string _filePath)
+{
+	//writing huffman codes to output file
+	ifstream file("test.txt", ios::binary);
+	if (!file.is_open())
+	{
+		cout << "Couldnt find file";
+		return;
+	}
+	ofstream output("output.txt", ios::out);
+	if (!output.is_open())
+	{
+		cout << "Couldnt find file";
+		return;
+	}
+
+	char c;
+	while (file.get(c))
+	{
+		output << huffmanCodes[(unsigned char)c];
+	}
+	file.close();
+	output.close();
+
+	//segemntation of 8 bits
+}
+
 int main()
 {
 	string huffmanCodes[256] = {""};
@@ -289,7 +316,7 @@ int main()
 			cout << "Charcter: " << (unsigned char)i << "\tCode: " << huffmanCodes[i] << endl;
 		}
 	}
-
+	compress(huffmanCodes, filePath);
 	int n;
 	cin >> n;
 	delete minHeap;
