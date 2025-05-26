@@ -3,7 +3,7 @@
 using namespace std;
 
 struct HuffmanNode {
-	char character;
+	unsigned char character;
 	int freq;
 	HuffmanNode* left,* right;
 	HuffmanNode() {
@@ -269,6 +269,48 @@ MinHeap* testDisplayHeap(MinHeap* _minHeap)
 	_minHeap = tempHeap;
 	return _minHeap;
 }
+void testDisplayCodes(const string huffmanCodes[256])
+{
+	cout << "======== Huffman Codes ========" << endl;
+
+	// Count how many codes we have
+	int codesCount = 0;
+	for (int i = 0; i < 256; i++) {
+		if (huffmanCodes[i] != "") {
+			codesCount++;
+		}
+	}
+
+	cout << "Total unique characters: " << codesCount << endl << endl;
+
+	// Display each code with formatting
+	for (int i = 0; i < 256; i++) {
+		if (huffmanCodes[i] != "") {
+			unsigned char ch = i;
+			// Format character display similar to testDisplayHeap
+			if (ch == ' ') {
+				cout << "Character: [SPACE]";
+			}
+			else if (ch == '\n') {
+				cout << "Character: '\\n'";
+			}
+			else if (ch == '\t') {
+				cout << "Character: [TAB]";
+			}
+			else if (ch >= 32 && ch <= 126) {  // Printable ASCII
+				cout << "Character: '" << ch << "'";
+			}
+			else {
+				cout << "Character: [ASCII " << (int)ch << "]";
+			}
+
+			// Print code and code length for analysis
+			cout << "   Code: " << huffmanCodes[i]
+				<< "   Length: " << huffmanCodes[i].length() << endl;
+		}
+	}
+	cout << "===============================" << endl;
+}
 
 void compress(string huffmanCodes[256] , string _filePath)
 {
@@ -301,21 +343,15 @@ int main()
 {
 	string huffmanCodes[256] = {""};
 	MinHeap* minHeap = new MinHeap();	
-	string filePath = "test.txt";
+	string filePath = "test_small.bmp";
 	/*cout << "Enter File Path: ";
 	cin >> filePath;*/
 	getFrequenciesFromFile(filePath, minHeap);
 	minHeap = testDisplayHeap(minHeap);
 	HuffmanNode* huffmanTree = generateHuffmanTree(minHeap);
 	generateHuffmanCodes(huffmanTree, huffmanCodes, "");
+	testDisplayCodes(huffmanCodes);  // Display the codes of huffman tree leafs
 
-	for (int i = 0; i < 256; i++)
-	{
-		if (huffmanCodes[i] != "")
-		{
-			cout << "Charcter: " << (unsigned char)i << "\tCode: " << huffmanCodes[i] << endl;
-		}
-	}
 	compress(huffmanCodes, filePath);
 	int n;
 	cin >> n;
