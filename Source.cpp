@@ -368,13 +368,14 @@ void compress(HuffmanNode* _huffmanTree, string huffmanCodes[256], string _fileP
 	file.seekg(0, ios::beg);
 
 	int dotIndex = _filePath.find('.');
-
+	int lastBackSlashIndex = _filePath.find_last_of("\\/");
+	string directory = _filePath.substr(0, lastBackSlashIndex + 1);
 	string fileExtension = _filePath.substr(dotIndex, _filePath.length() - dotIndex);
 
 	string _outputFilePath = "output" + fileExtension + ".ece2103";
 
-	ofstream output(_outputFilePath, ios::binary);
-	ofstream outputCodes("codes.cod", ios::binary);
+	ofstream output(directory +  _outputFilePath, ios::binary);
+	ofstream outputCodes(directory + "codes.cod", ios::binary);
 
 	if (!output.is_open())
 	{
@@ -444,7 +445,11 @@ void decompress(string _filePath, string _codesFilePath)
 		return;
 	}
 
-	ifstream codesFile(_codesFilePath, ios::binary);
+	int lastBackSlashIndex = _filePath.find_last_of("\\/");
+	string directory = _filePath.substr(0, lastBackSlashIndex + 1);
+
+	ifstream codesFile(directory + _codesFilePath, ios::binary);
+
 	if (!codesFile.is_open())
 	{
 		cout << "Couldn't find codes file";
@@ -465,12 +470,18 @@ void decompress(string _filePath, string _codesFilePath)
 	}
 
 	//output filename
-	int dotIndex = _filePath.find_last_of('.');
-	string baseFileName = _filePath.substr(0, dotIndex);
+	cout << _filePath.length() << endl << endl;
 
+	cout << _filePath << endl << endl;
+	int dotIndex = _filePath.find_last_of('.');
+	cout << dotIndex << endl << endl;
+
+	string baseFileName = _filePath.substr(lastBackSlashIndex + 1, dotIndex - (lastBackSlashIndex + 1));
+	cout << baseFileName << endl;
 	string outputFileName = "decompressed_" + baseFileName;
 
-	ofstream output(outputFileName, ios::binary);
+	//cout << directory + outputFileName << endl;
+	ofstream output(directory + outputFileName, ios::binary);
 	if (!output.is_open())
 	{
 		cout << "Couldn't create output file";
@@ -534,22 +545,42 @@ void decompress(string _filePath, string _codesFilePath)
 
 }
 
-int main()
+int main(int argc, char* argv[])
 {
-	string huffmanCodes[256] = { "" };
-	MinHeap* minHeap = new MinHeap();
-	string filePath = "test.txt";
-	/*cout << "Enter File Path: ";
-	cin >> filePath;*/
-	getFrequenciesFromFile(filePath, minHeap);
-	minHeap = testDisplayHeap(minHeap);
-	HuffmanNode* huffmanTree = generateHuffmanTree(minHeap);
-	generateHuffmanCodes(huffmanTree, huffmanCodes, "");
-	testDisplayCodes(huffmanCodes);
+	if (argc != 3)  
+	{
+		cout << "Error in arguments! " << endl;
+		return -1;
+	}
 
-	compress(huffmanTree, huffmanCodes, filePath);
+	string command = argv[1];
+	string filename = argv[2];
 
-	decompress("output.txt.ece2103", "codes.cod");
-	delete minHeap;
+	if (command == "-c")
+	{
+		// Compression
+		string huffmanCodes[256] = { "" };
+		MinHeap* minHeap = new MinHeap();
+
+		getFrequenciesFromFile(filename, minHeap);  // Use argv[2]
+		minHeap = testDisplayHeap(minHeap);
+		HuffmanNode* huffmanTree = generateHuffmanTree(minHeap);
+		generateHuffmanCodes(huffmanTree, huffmanCodes, "");
+		testDisplayCodes(huffmanCodes);
+
+		compress(huffmanTree, huffmanCodes, filename);
+
+		delete minHeap;
+	}
+	else if (command == "-d")
+	{
+		decompress(filename, "codes.cod");
+	}
+	else
+	{
+		cout << "Invalid command. Use -c for compress or -d for decompress followed by filename" << endl;
+		return -1;
+	}
+
 	return 0;
 }
