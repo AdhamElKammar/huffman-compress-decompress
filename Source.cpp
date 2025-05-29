@@ -6,7 +6,7 @@ using namespace std;
 struct HuffmanNode {
 	unsigned char character;
 	int freq;
-	HuffmanNode* left,* right;
+	HuffmanNode* left, * right;
 	HuffmanNode() {
 		character = NULL;
 		freq = 0;
@@ -172,9 +172,9 @@ void getFrequenciesFromFile(string _filePath, MinHeap* _minHeap)
 	}
 
 	// Read file character by character and add frequencies to freq array
-	char c;  
+	char c;
 	while (file.get(c)) {
-		arr[(unsigned char)c]++;  
+		arr[(unsigned char)c]++;
 	}
 	file.close();
 
@@ -182,12 +182,12 @@ void getFrequenciesFromFile(string _filePath, MinHeap* _minHeap)
 	for (int i = 0; i < 256; i++) {
 		if (arr[i] > 0) {
 			_minHeap->add(new HuffmanNode(i, arr[i]));
-			
+
 		}
 	}
 }
 
-HuffmanNode* generateHuffmanTree(MinHeap* _minHeap ) {
+HuffmanNode* generateHuffmanTree(MinHeap* _minHeap) {
 	while (_minHeap->getSize() > 1)
 	{
 		//Allocate the two nodes
@@ -213,7 +213,7 @@ HuffmanNode* generateHuffmanTree(MinHeap* _minHeap ) {
 
 		//Parent node freq is sum of two linked nodes
 		parent->freq = node1->freq + node2->freq;
-		
+
 		//Add to heap again and iterate over the process
 		_minHeap->add(parent);
 	}
@@ -224,7 +224,7 @@ HuffmanNode* generateHuffmanTree(MinHeap* _minHeap ) {
 }
 
 
-void generateHuffmanCodes(HuffmanNode* root, string huffmanCodes[256] ,string currentCode) {
+void generateHuffmanCodes(HuffmanNode* root, string huffmanCodes[256], string currentCode) {
 
 	if (root == nullptr) return;
 
@@ -235,6 +235,7 @@ void generateHuffmanCodes(HuffmanNode* root, string huffmanCodes[256] ,string cu
 	}
 
 	generateHuffmanCodes(root->left, huffmanCodes, currentCode + '0');
+
 	generateHuffmanCodes(root->right, huffmanCodes, currentCode + '1');
 }
 
@@ -266,7 +267,7 @@ MinHeap* testDisplayHeap(MinHeap* _minHeap)
 		}
 		cout << "   Frequency: " << node.freq << endl;
 	}
-		
+
 	_minHeap = tempHeap;
 	return _minHeap;
 }
@@ -313,15 +314,59 @@ void testDisplayCodes(const string huffmanCodes[256])
 	cout << "===============================" << endl;
 }
 
-void compress(string huffmanCodes[256], string _filePath)
+// Function to serialize the Huffman tree to a file for compression
+void serializeTree(HuffmanNode* root, ofstream& output) {
+	if (!root) {
+		output.put(0); // Null marker
+		return;
+	}
+
+	if (root->left == nullptr && root->right == nullptr) {
+		output.put('1'); // Leaf marker
+		output.put(root->character); // Character
+	}
+	else {
+		output.put('2'); // Internal node marker
+		serializeTree(root->left, output);
+		serializeTree(root->right, output);
+	}
+}
+
+// Function to deserialize the Huffman tree from a file for decompression
+HuffmanNode* deserializeTree(ifstream& input) {
+	char marker;
+	input.get(marker);
+
+	if (marker == '1') { // Leaf
+		char data;
+		input.get(data);
+		return new HuffmanNode(data, 0);
+	}
+	else if (marker == '2') { // Internal
+		HuffmanNode* node = new HuffmanNode('\0', 0);
+		node->left = deserializeTree(input);
+		node->right = deserializeTree(input);
+		return node;
+	}
+	return nullptr;
+}
+
+void compress(HuffmanNode* _huffmanTree, string huffmanCodes[256], string _filePath)
 {
+
+
+
 	ifstream file(_filePath, ios::binary);
 	if (!file.is_open())
 	{
 		cout << "Couldn't find input file";
 		return;
 	}
-	
+	// GET ORIGINAL FILE SIZE FIRST
+	file.seekg(0, ios::end);
+	long long originalSize = file.tellg();
+	file.seekg(0, ios::beg);
+
 	int dotIndex = _filePath.find('.');
 
 	string fileExtension = _filePath.substr(dotIndex, _filePath.length() - dotIndex);
@@ -329,11 +374,23 @@ void compress(string huffmanCodes[256], string _filePath)
 	string _outputFilePath = "output" + fileExtension + ".ece2103";
 
 	ofstream output(_outputFilePath, ios::binary);
+	ofstream outputCodes("codes.cod", ios::binary);
+
 	if (!output.is_open())
 	{
 		cout << "Couldn't create output file";
 		return;
 	}
+	if (!outputCodes.is_open())
+	{
+		cout << "Couldn't create output codes file";
+		return;
+	}
+	// Write the original size to output file
+	output.write(reinterpret_cast<char*>(&originalSize), sizeof(originalSize));
+
+	//Serialize the Huffman tree to the output file
+	serializeTree(_huffmanTree, outputCodes);
 
 	string curr = "";
 	char c;
@@ -375,12 +432,112 @@ void compress(string huffmanCodes[256], string _filePath)
 
 	file.close();
 	output.close();
+	cout << "Compression complete. Output file: " << _outputFilePath << endl;
+	cout << "Original file size: " << originalSize << " bytes" << endl;
+}
+void decompress(string _filePath, string _codesFilePath)
+{
+	ifstream file(_filePath, ios::binary);
+	if (!file.is_open())
+	{
+		cout << "Couldn't find input file";
+		return;
+	}
+
+	ifstream codesFile(_codesFilePath, ios::binary);
+	if (!codesFile.is_open())
+	{
+		cout << "Couldn't find codes file";
+		return;
+	}
+	// Read original size
+	long long originalSize;
+	if (!file.read(reinterpret_cast<char*>(&originalSize), sizeof(originalSize))) {
+		cout << "Error: Could not read original file size" << endl;
+		return;
+	}
+
+	cout << "Expected to decompress " << originalSize << " bytes" << endl;
+	HuffmanNode* huffmanTree = deserializeTree(codesFile);
+	if (!huffmanTree) {
+		cout << "Error: Failed to deserialize Huffman tree" << endl;
+		return;
+	}
+
+	//output filename
+	int dotIndex = _filePath.find_last_of('.');
+	string baseFileName = _filePath.substr(0, dotIndex);
+
+	string outputFileName = "decompressed_" + baseFileName;
+
+	ofstream output(outputFileName, ios::binary);
+	if (!output.is_open())
+	{
+		cout << "Couldn't create output file";
+		return;
+	}
+	HuffmanNode* currentNode = huffmanTree;
+	char byte;
+	long long decodedCount = 0;
+	while (file.get(byte) && decodedCount < originalSize)
+	{
+		bitset<8> bits(byte);
+		for (int i = 7; i >= 0; i--)
+		{
+			if (bits[i] == 0)
+			{
+				currentNode = currentNode->left;
+			}
+			else if (bits[i] == 1)
+			{
+				currentNode = currentNode->right;
+			}
+
+			// Check if we've reached a leaf node
+			if (currentNode && currentNode->left == nullptr && currentNode->right == nullptr)
+			{
+				output.put(currentNode->character);
+				decodedCount++;
+				currentNode = huffmanTree;  // Reset to root
+				// Progress indicator for large files - El AI oltlto y3mlha
+				if (decodedCount % 1000 == 0) {
+					cout << "Decoded: " << decodedCount << "/" << originalSize << " bytes\r" << flush;
+				}
+				// Stope when we decoded all original chars
+				if (decodedCount >= originalSize) {
+					break;
+				}
+			}
+
+			// Safety check
+			if (!currentNode) {
+				cout << "Error: Invalid tree traversal";
+				break;
+			}
+		}
+	}
+	file.close();
+	codesFile.close();
+	output.close();
+	cout << "\nDecompression complete!" << endl;
+	cout << "Output file: " << outputFileName << endl;
+	cout << "Decoded " << decodedCount << " characters (expected: " << originalSize << ")" << endl;
+
+	if (decodedCount == originalSize) {
+		cout << "SUCCESS: File decompressed correctly!" << endl;
+	}
+	else {
+		cout << "WARNING: Decoded count doesn't match expected size!" << endl;
+	}
+
+	delete huffmanTree;
+
 }
 
 int main()
 {
-	string huffmanCodes[256] = {""};
-	MinHeap* minHeap = new MinHeap();	
+	string huffmanCodes[256] = { "" };
+	MinHeap* minHeap = new MinHeap();
 	string filePath = "test.txt";
 	/*cout << "Enter File Path: ";
 	cin >> filePath;*/
@@ -388,11 +545,11 @@ int main()
 	minHeap = testDisplayHeap(minHeap);
 	HuffmanNode* huffmanTree = generateHuffmanTree(minHeap);
 	generateHuffmanCodes(huffmanTree, huffmanCodes, "");
-	testDisplayCodes(huffmanCodes); 
+	testDisplayCodes(huffmanCodes);
 
-	compress(huffmanCodes, filePath);
-	int n;
-	cin >> n;
+	compress(huffmanTree, huffmanCodes, filePath);
+
+	decompress("output.txt.ece2103", "codes.cod");
 	delete minHeap;
 	return 0;
 }
