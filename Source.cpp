@@ -1,6 +1,7 @@
 #include <iostream>
 #include <fstream>
 #include <bitset>
+#include <chrono>
 using namespace std;
 
 struct HuffmanNode {
@@ -351,18 +352,24 @@ HuffmanNode* deserializeTree(ifstream& input) {
 	return nullptr;
 }
 
-void compress(HuffmanNode* _huffmanTree, string huffmanCodes[256], string _filePath)
+void compress(HuffmanNode* _huffmanTree, string huffmanCodes[256], string _filePath, int _bufferSize)
 {
+	cout << _bufferSize << endl << endl;
+	const long long INPUT_BUFFER_SIZE = _bufferSize * 1024;
+	const long long OUTPUT_BUFFER_SIZE = _bufferSize * 1024;
 
-
+	char* inputBuffer = new char[INPUT_BUFFER_SIZE];
+	char* outputBuffer = new char[OUTPUT_BUFFER_SIZE];
+	long long outputBufferPos = 0;
 
 	ifstream file(_filePath, ios::binary);
 	if (!file.is_open())
 	{
-		cout << "Couldn't find input file";
+		cout << "Couldn't find input file: " << _filePath << endl;
 		return;
 	}
-	// GET ORIGINAL FILE SIZE FIRST
+
+	// Get original file size
 	file.seekg(0, ios::end);
 	long long originalSize = file.tellg();
 	file.seekg(0, ios::beg);
@@ -370,91 +377,167 @@ void compress(HuffmanNode* _huffmanTree, string huffmanCodes[256], string _fileP
 	int dotIndex = _filePath.find('.');
 	int lastBackSlashIndex = _filePath.find_last_of("\\/");
 	string directory = _filePath.substr(0, lastBackSlashIndex + 1);
+	string fileName = _filePath.substr(lastBackSlashIndex + 1, dotIndex - (lastBackSlashIndex + 1));
 	string fileExtension = _filePath.substr(dotIndex, _filePath.length() - dotIndex);
 
-	string _outputFilePath = "output" + fileExtension + ".ece2103";
+	string _outputFilePath = fileName + fileExtension + ".ece2103";
 
-	ofstream output(directory +  _outputFilePath, ios::binary);
-	ofstream outputCodes(directory + "codes.cod", ios::binary);
+	ofstream output(directory + _outputFilePath, ios::binary);
+	ofstream outputCodes(directory + fileName + "_codes.cod", ios::binary);
 
 	if (!output.is_open())
 	{
-		cout << "Couldn't create output file";
+		cout << "Couldn't create output file" << endl;
 		return;
 	}
 	if (!outputCodes.is_open())
 	{
-		cout << "Couldn't create output codes file";
+		cout << "Couldn't create output codes file" << endl;
 		return;
 	}
+
 	// Write the original size to output file
 	output.write(reinterpret_cast<char*>(&originalSize), sizeof(originalSize));
 
-	//Serialize the Huffman tree to the output file
+	// Serialize the Huffman tree to the output file
 	serializeTree(_huffmanTree, outputCodes);
 
-	string curr = "";
-	char c;
 
-	// read input file character by character
-	while (file.get(c))
-	{
-		string huffmanCode = huffmanCodes[(unsigned char)c];
-
-		// process single bit in huffman code
-		for (char bit : huffmanCode)
+	auto flushOutputBuffer = [&]() -> void
 		{
-			curr += bit;
+			if (outputBufferPos > 0) {
+				output.write(outputBuffer, outputBufferPos);
+				outputBufferPos = 0;
+			}
+		};
 
-			// when we have 8 bits, convert to byte and we write to outfut file
-			if (curr.length() == 8)
-			{
-				bitset<8> bits(curr);
-				unsigned char byte = (unsigned char)(bits.to_ulong());
-				output.put(byte);
-				curr = "";
+	string curr = "";
+
+	cout << "Compressing " << originalSize << " bytes..." << endl;
+	auto startTime = chrono::high_resolution_clock::now();
+
+	long long processedBytes = 0;
+	int progressCounter = 0;
+
+	// Read input file
+	while (file.read(inputBuffer, INPUT_BUFFER_SIZE) || file.gcount() > 0) {
+		streamsize bytesRead = file.gcount();
+
+		// Process input buffer in batches
+		for (streamsize i = 0; i < bytesRead; i++) {
+			unsigned char c = inputBuffer[i];
+			const string& huffmanCode = huffmanCodes[c];
+
+			// Process each bit in huffman code
+			for (char bit : huffmanCode) {
+				curr += bit;
+
+				// convert curr to byte when it reaches 8 bits
+				if (curr.length() == 8) {
+					bitset<8> bits(curr);
+					unsigned char byte = (unsigned char)(bits.to_ulong());
+					outputBuffer[outputBufferPos++] = byte;
+
+					if (outputBufferPos >= OUTPUT_BUFFER_SIZE) {
+						flushOutputBuffer();
+					}
+
+					curr = "";
+				}
+			}
+
+			// Progress Tracking
+			if (++progressCounter >= 100000) { // Update every 100K bytes
+				processedBytes += progressCounter;
+				cout << "Processed: " << processedBytes << "/" << originalSize
+					<< " (" << (processedBytes * 100 / originalSize) << "%)\r" << flush;
+				progressCounter = 0;
 			}
 		}
 	}
 
+	processedBytes += progressCounter;
+
 	// Handle padding
-	if (!curr.empty())
-	{
+	if (!curr.empty()) {
 		// Pad with zeros at the end
-		while (curr.length() < 8)
-		{
+		while (curr.length() < 8) {
 			curr += '0';
 		}
 
+		// Use bit manipulation instead of bitset for consistency
 		bitset<8> bits(curr);
 		unsigned char byte = (unsigned char)(bits.to_ulong());
-		output.put(byte);
+		outputBuffer[outputBufferPos++] = byte;
 	}
+
+	// Final flush
+	flushOutputBuffer();
 
 	file.close();
 	output.close();
+	outputCodes.close();
+
+	auto endTime = chrono::high_resolution_clock::now();
+	auto duration = chrono::duration_cast<chrono::milliseconds>(endTime - startTime);
+
+	cout << "\nCompression completed in " << duration.count() << " ms!" << endl;
+	cout << "Speed: " << (originalSize / 1024.0 / 1024.0) / (duration.count() / 1000.0) << " MB/s" << endl;
+
+	// File size statistics
+	ifstream compressedFile(directory + _outputFilePath, ios::binary | ios::ate);
+	if (compressedFile.is_open()) {
+		long long compressedSize = compressedFile.tellg();
+		compressedFile.close();
+		cout << "Original file size: " << originalSize << " bytes" << endl;
+		cout << "Compressed file size: " << compressedSize << " bytes" << endl;
+		cout << "Compression ratio: " << (double)compressedSize / originalSize * 100 << "%" << endl;
+		cout << "Space saved: " << ((double)(originalSize - compressedSize) / originalSize * 100) << "%" << endl;
+	}
+
 	cout << "Compression complete. Output file: " << _outputFilePath << endl;
-	cout << "Original file size: " << originalSize << " bytes" << endl;
+	delete[] inputBuffer;
+	delete[] outputBuffer;
+	// Clean up Huffman tree
+	delete _huffmanTree;
 }
-void decompress(string _filePath, string _codesFilePath)
+void decompress(string _filePath, int _bufferSize = 1)//, string _codesFilePath
 {
+
+	const long long INPUT_BUFFER_SIZE = _bufferSize * 1024;
+	const long long OUTPUT_BUFFER_SIZE = _bufferSize * 1024;
+
+	char* inputBuffer = new char[INPUT_BUFFER_SIZE];
+	char* outputBuffer = new char[OUTPUT_BUFFER_SIZE];
+	long long outputBufferPos = 0;
+
 	ifstream file(_filePath, ios::binary);
 	if (!file.is_open())
 	{
-		cout << "Couldn't find input file";
+		cout << "Couldn't find input file: " << _filePath << endl;
 		return;
 	}
+
 
 	int lastBackSlashIndex = _filePath.find_last_of("\\/");
+	int lastDotIndex = _filePath.find_last_of('.');
+	int firstDotIndex = _filePath.find_first_of('.');
+
+	string fileNameWithExtension = _filePath.substr(lastBackSlashIndex + 1, lastDotIndex - (lastBackSlashIndex + 1));
+
+	string fileNameOnly = fileNameWithExtension.substr(0, firstDotIndex - (lastBackSlashIndex + 1));
+
+	// Full file name with extension
 	string directory = _filePath.substr(0, lastBackSlashIndex + 1);
 
+	string _codesFilePath = fileNameOnly + "_codes.cod"; // Default codes file path
 	ifstream codesFile(directory + _codesFilePath, ios::binary);
-
 	if (!codesFile.is_open())
 	{
-		cout << "Couldn't find codes file";
+		cout << "Couldn't find codes file: " << _codesFilePath << endl;
 		return;
 	}
+
 	// Read original size
 	long long originalSize;
 	if (!file.read(reinterpret_cast<char*>(&originalSize), sizeof(originalSize))) {
@@ -463,75 +546,107 @@ void decompress(string _filePath, string _codesFilePath)
 	}
 
 	cout << "Expected to decompress " << originalSize << " bytes" << endl;
+
 	HuffmanNode* huffmanTree = deserializeTree(codesFile);
 	if (!huffmanTree) {
 		cout << "Error: Failed to deserialize Huffman tree" << endl;
 		return;
 	}
 
-	//output filename
-	cout << _filePath.length() << endl << endl;
 
-	cout << _filePath << endl << endl;
-	int dotIndex = _filePath.find_last_of('.');
-	cout << dotIndex << endl << endl;
 
-	string baseFileName = _filePath.substr(lastBackSlashIndex + 1, dotIndex - (lastBackSlashIndex + 1));
-	cout << baseFileName << endl;
-	string outputFileName = "decompressed_" + baseFileName;
-
-	//cout << directory + outputFileName << endl;
-	ofstream output(directory + outputFileName, ios::binary);
+	ofstream output(directory + fileNameWithExtension, ios::binary);
 	if (!output.is_open())
 	{
-		cout << "Couldn't create output file";
+		cout << "Couldn't create output file" << endl;
 		return;
 	}
-	HuffmanNode* currentNode = huffmanTree;
-	char byte;
-	long long decodedCount = 0;
-	while (file.get(byte) && decodedCount < originalSize)
-	{
-		bitset<8> bits(byte);
-		for (int i = 7; i >= 0; i--)
+
+	// Optimized buffer flushing function
+	auto flushOutputBuffer = [&]() -> void
 		{
-			if (bits[i] == 0)
+			if (outputBufferPos > 0)
 			{
-				currentNode = currentNode->left;
+				output.write(outputBuffer, outputBufferPos);
+				outputBufferPos = 0;
 			}
-			else if (bits[i] == 1)
-			{
-				currentNode = currentNode->right;
-			}
+		};
 
-			// Check if we've reached a leaf node
-			if (currentNode && currentNode->left == nullptr && currentNode->right == nullptr)
-			{
-				output.put(currentNode->character);
-				decodedCount++;
-				currentNode = huffmanTree;  // Reset to root
-				// Progress indicator for large files - El AI oltlto y3mlha
-				if (decodedCount % 1000 == 0) {
-					cout << "Decoded: " << decodedCount << "/" << originalSize << " bytes\r" << flush;
-				}
-				// Stope when we decoded all original chars
-				if (decodedCount >= originalSize) {
-					break;
-				}
-			}
 
-			// Safety check
-			if (!currentNode) {
-				cout << "Error: Invalid tree traversal";
-				break;
+	cout << "Decompressing..." << endl;
+	auto startTime = chrono::high_resolution_clock::now();
+
+	HuffmanNode* currentNode = huffmanTree;
+	long long decodedCount = 0;
+	int progressCounter = 0;
+
+	// Read input file in larger chunks instead of byte by byte
+	while (file.read(inputBuffer, INPUT_BUFFER_SIZE) || file.gcount() > 0) {
+		streamsize bytesRead = file.gcount();
+
+		// Process input buffer in batches
+		for (streamsize i = 0; i < bytesRead && decodedCount < originalSize; i++) {
+			unsigned char byte = inputBuffer[i];
+			bitset<8> bits(byte);
+			// Process all 8 bits of the byte using bit manipulation (faster than bitset)
+			for (int bitIndex = 7; bitIndex >= 0 && decodedCount < originalSize; bitIndex--) {
+				// Fast bit extraction using bit manipulation
+
+
+				if (bits[bitIndex] == 0) {
+					currentNode = currentNode->left;
+				}
+				else {
+					currentNode = currentNode->right;
+				}
+
+				// Check if we've reached a leaf node
+				if (currentNode && currentNode->left == nullptr && currentNode->right == nullptr) {
+					// Use buffered output instead of direct file writes
+					outputBuffer[outputBufferPos++] = currentNode->character;
+
+					decodedCount++;
+					currentNode = huffmanTree;  // Reset to root
+					if (outputBufferPos >= OUTPUT_BUFFER_SIZE) {
+						flushOutputBuffer();
+					}
+					// Progress indicator - reduced frequency for performance
+					if (++progressCounter >= 50000) { // Update every 50K characters
+						cout << "Decoded: " << decodedCount << "/" << originalSize
+							<< " (" << (decodedCount * 100 / originalSize) << "%)\r" << flush;
+						progressCounter = 0;
+					}
+
+					// Stop when we decoded all original chars
+					if (decodedCount >= originalSize) {
+						break;
+					}
+				}
+
+				// Safety check
+				if (!currentNode) {
+					cout << "Error: Invalid tree traversal" << endl;
+					flushOutputBuffer();
+					delete huffmanTree;
+					return;
+				}
 			}
 		}
 	}
+
+	// Final flush of any remaining output
+	flushOutputBuffer();
+
+	auto endTime = chrono::high_resolution_clock::now();
+	auto duration = chrono::duration_cast<chrono::milliseconds>(endTime - startTime);
+
 	file.close();
 	codesFile.close();
 	output.close();
-	cout << "\nDecompression complete!" << endl;
-	cout << "Output file: " << outputFileName << endl;
+
+	cout << "\nDecompression completed in " << duration.count() << " ms!" << endl;
+	cout << "Speed: " << (originalSize / 1024.0 / 1024.0) / (duration.count() / 1000.0) << " MB/s" << endl;
+	cout << "Output file: " << fileNameWithExtension << endl;
 	cout << "Decoded " << decodedCount << " characters (expected: " << originalSize << ")" << endl;
 
 	if (decodedCount == originalSize) {
@@ -542,19 +657,35 @@ void decompress(string _filePath, string _codesFilePath)
 	}
 
 	delete huffmanTree;
-
 }
 
 int main(int argc, char* argv[])
 {
-	if (argc != 3)  
+	if (argc != 3 && argc != 5)
 	{
 		cout << "Error in arguments! " << endl;
 		return -1;
 	}
 
-	string command = argv[1];
-	string filename = argv[2];
+	// testhuffman.exe -b    512    -d      "E:\Omar\College\Semister IV\DSA\testhuffman\output.bmp.ece2103"
+	//  0               1     2      3            4
+	// testhuffman.exe -d  "E:\Omar\College\Semister IV\DSA\testhuffman\output.bmp.ece2103"
+	//  0               1       2     
+
+	string command;
+	string filename;
+	int bufferSize = 1; // Default buffer size is 1 KB
+	if (argc == 3)
+	{
+		command = argv[1];
+		filename = argv[2];
+	}
+	else
+	{
+		bufferSize = atoi(argv[2]);
+		command = argv[3];
+		filename = argv[4];
+	}
 
 	if (command == "-c")
 	{
@@ -562,19 +693,19 @@ int main(int argc, char* argv[])
 		string huffmanCodes[256] = { "" };
 		MinHeap* minHeap = new MinHeap();
 
-		getFrequenciesFromFile(filename, minHeap);  // Use argv[2]
 		minHeap = testDisplayHeap(minHeap);
+		getFrequenciesFromFile(filename, minHeap);
 		HuffmanNode* huffmanTree = generateHuffmanTree(minHeap);
 		generateHuffmanCodes(huffmanTree, huffmanCodes, "");
 		testDisplayCodes(huffmanCodes);
 
-		compress(huffmanTree, huffmanCodes, filename);
+		compress(huffmanTree, huffmanCodes, filename, bufferSize);
 
 		delete minHeap;
 	}
 	else if (command == "-d")
 	{
-		decompress(filename, "codes.cod");
+		decompress(filename, bufferSize);
 	}
 	else
 	{
